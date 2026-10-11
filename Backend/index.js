@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 
 import connectDB from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
+import authRoutes from "./routes/authRoutes.js";
 
 import dns from 'node:dns';
 dns.setServers(['8.8.8.8', '1.1.1.1']);
@@ -30,7 +31,11 @@ app.use(
 );
 
 // Routes
+// Health check
 app.use('/api/health', healthRoutes);
+
+// Authentication APIs
+app.use('/api/auth', authRoutes);
 
 app.use('/api', (req, res) => {
     return res.status(404).json({
@@ -57,6 +62,7 @@ const startServer = async () => {
         app.listen(PORT, () => {
             console.log(`Server running at ${PORT}`);
             console.log(`Health check: http://localhost:${PORT}/api/health`);
+            console.log(`Auth: http://localhost:${PORT}/api/auth`);
         });
     } catch (error) {
         console.error("Server startup failed because MongoDB is unavailable.");
