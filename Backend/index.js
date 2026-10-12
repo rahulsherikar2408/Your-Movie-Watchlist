@@ -7,6 +7,7 @@ import connectDB from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from "./routes/authRoutes.js";
 import watchlistRoutes from "./routes/watchlistRoutes.js";
+import commentRoutes from "./routes/commentRoutes.js";
 
 import dns from 'node:dns';
 if (process.env.MONGODB_URL && process.env.MONGODB_URL.startsWith('mongodb+srv://')) {
@@ -41,6 +42,9 @@ app.use('/api/auth', authRoutes);
 
 // Watchlist APIs
 app.use("/api/watchlist", watchlistRoutes);
+
+// Movie comments APIs
+app.use("/api", commentRoutes);
 
 app.use('/api', (req, res) => {
     return res.status(404).json({

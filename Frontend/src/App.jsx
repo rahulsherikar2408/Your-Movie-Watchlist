@@ -12,7 +12,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
-import { useAuth } from "./context/authContext";
+import { useAuth } from "./context/AuthContext";
 import {
   fetchWatchlist,
   addMovieToWatchlist,
