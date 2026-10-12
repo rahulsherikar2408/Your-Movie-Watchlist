@@ -42,6 +42,13 @@ function MovieInfo({
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Trailer states
+  const [videos, setVideos] = useState([]);
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [trailerLoading, setTrailerLoading] = useState(false);
+  const [trailerNotice, setTrailerNotice] = useState("");
+  const [isTrailerModalOpen, setIsTrailerModalOpen] = useState(false);
+
   const movieId = Number(id);
 
   const isInWatchlist = watchList.some(
@@ -106,6 +113,125 @@ function MovieInfo({
 
     return () => controller.abort();
   }, [movieId, activeType]);
+
+  // Fetch trailer videos from TMDB
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchVideos = async () => {
+      setTrailerLoading(true);
+      setVideos([]);
+      setSelectedVideo(null);
+
+      if (!TMDB_API_KEY) {
+        setTrailerLoading(false);
+        return;
+      }
+
+      try {
+        const primaryEndpoint = activeType === "tv" ? "tv" : "movie";
+        let response = await fetch(
+          `https://api.themoviedb.org/3/${primaryEndpoint}/${movieId}/videos?api_key=${TMDB_API_KEY}&language=en-US`,
+          { signal: controller.signal }
+        );
+
+        if (!response.ok && response.status === 404) {
+          const fallbackEndpoint = primaryEndpoint === "tv" ? "movie" : "tv";
+          const fallbackRes = await fetch(
+            `https://api.themoviedb.org/3/${fallbackEndpoint}/${movieId}/videos?api_key=${TMDB_API_KEY}&language=en-US`,
+            { signal: controller.signal }
+          );
+          if (fallbackRes.ok) {
+            response = fallbackRes;
+          }
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+          let results = data.results || [];
+
+          // If no videos returned with language=en-US, try without language filter as fallback
+          if (results.length === 0) {
+            const endpoint = activeType === "tv" ? "tv" : "movie";
+            const noLangRes = await fetch(
+              `https://api.themoviedb.org/3/${endpoint}/${movieId}/videos?api_key=${TMDB_API_KEY}`,
+              { signal: controller.signal }
+            );
+            if (noLangRes.ok) {
+              const noLangData = await noLangRes.json();
+              if (noLangData.results?.length > 0) {
+                results = noLangData.results;
+              }
+            }
+          }
+
+          setVideos(results);
+
+          // Find the best official trailer or teaser
+          const bestVideo =
+            results.find(
+              (v) => v.site === "YouTube" && v.type === "Trailer" && v.official
+            ) ||
+            results.find(
+              (v) => v.site === "YouTube" && v.type === "Trailer"
+            ) ||
+            results.find(
+              (v) =>
+                v.site === "YouTube" &&
+                (v.type === "Teaser" || v.type === "Clip")
+            ) ||
+            results.find((v) => v.site === "YouTube") ||
+            results[0] ||
+            null;
+
+          setSelectedVideo(bestVideo);
+        }
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Error fetching trailer videos:", error);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setTrailerLoading(false);
+        }
+      }
+    };
+
+    if (Number.isSafeInteger(movieId) && movieId > 0) {
+      fetchVideos();
+    }
+
+    return () => controller.abort();
+  }, [movieId, activeType]);
+
+  // Lock body scroll and listen for Escape key when modal is open
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsTrailerModalOpen(false);
+      }
+    };
+
+    if (isTrailerModalOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "auto";
+    };
+  }, [isTrailerModalOpen]);
+
+  const handleWatchTrailer = () => {
+    if (selectedVideo && selectedVideo.key) {
+      setTrailerNotice("");
+      setIsTrailerModalOpen(true);
+    } else {
+      setTrailerNotice("No trailer is currently available for this title.");
+      setTimeout(() => setTrailerNotice(""), 4000);
+    }
+  };
 
   // Fetch comments. This endpoint is public, so no login is required.
   const fetchComments = async () => {
@@ -355,6 +481,25 @@ function MovieInfo({
               >
                 Add to Watchlist
               </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleWatchTrailer}
+              disabled={trailerLoading}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 font-semibold text-white shadow-md transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <i className="fa-solid fa-circle-play text-lg text-red-500" />
+              <span>{trailerLoading ? "Loading Trailer..." : "Watch Trailer"}</span>
+            </button>
+
+            {trailerNotice && (
+              <p
+                role="status"
+                className="mt-2 text-center text-xs font-semibold text-amber-600"
+              >
+                {trailerNotice}
+              </p>
             )}
           </div>
 
@@ -623,6 +768,110 @@ function MovieInfo({
           )}
         </div>
       </section>
+
+      {/* Trailer Video Modal */}
+      {isTrailerModalOpen && selectedVideo && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${movieData?.title || movieData?.name || "Video"} Trailer`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+          onClick={() => setIsTrailerModalOpen(false)}
+        >
+          <div
+            className="relative flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-800 px-5 py-3.5 text-white">
+              <div className="flex items-center gap-2 overflow-hidden pr-3">
+                <i className="fa-solid fa-play text-xs text-red-500" />
+                <h3 className="truncate text-base font-bold sm:text-lg">
+                  {selectedVideo.name ||
+                    `${movieData?.title || movieData?.name || "Title"} Trailer`}
+                </h3>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-3">
+                {selectedVideo.site === "YouTube" && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${selectedVideo.key}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden items-center gap-1.5 text-xs font-semibold text-gray-400 transition hover:text-white sm:inline-flex"
+                    title="Open on YouTube"
+                  >
+                    <span>YouTube</span>
+                    <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsTrailerModalOpen(false)}
+                  aria-label="Close trailer modal"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-gray-300 transition hover:bg-gray-700 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Video Player */}
+            <div className="relative aspect-video w-full bg-black">
+              {selectedVideo.site === "YouTube" ? (
+                <iframe
+                  className="h-full w-full"
+                  src={`https://www.youtube.com/embed/${selectedVideo.key}?autoplay=1&rel=0`}
+                  title={selectedVideo.name || "Trailer"}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center p-6 text-center text-gray-400">
+                  <p>
+                    Trailer hosted on {selectedVideo.site}.{" "}
+                    <a
+                      href={selectedVideo.key}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 underline"
+                    >
+                      Watch external video
+                    </a>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Multiple Videos Selector */}
+            {videos.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto border-t border-gray-800 bg-gray-950/80 p-3">
+                <span className="shrink-0 text-xs font-semibold text-gray-400">
+                  Other Videos:
+                </span>
+                {videos.slice(0, 5).map((v) => (
+                  <button
+                    key={v.id || v.key}
+                    type="button"
+                    onClick={() => setSelectedVideo(v)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition ${
+                      selectedVideo.key === v.key
+                        ? "bg-red-600 text-white"
+                        : "bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white"
+                    }`}
+                  >
+                    {v.type || "Video"}:{" "}
+                    {v.name && v.name.length > 25
+                      ? `${v.name.slice(0, 25)}…`
+                      : v.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
