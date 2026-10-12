@@ -26,10 +26,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // CORS configuration
-const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: process.env.FRONTEND_API_URL || "http://localhost:5173",
   })
 );
 
