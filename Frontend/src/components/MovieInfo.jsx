@@ -8,6 +8,7 @@ const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
 
 function MovieInfo({
+  contentType: defaultContentType = "movie",
   watchList = [],
   handleAddToWatchList,
   handleRemoveFromWatchList,
@@ -16,6 +17,13 @@ function MovieInfo({
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
+
+  const activeType =
+    location.state?.contentType ||
+    (location.state?.movie?.first_air_date ? "tv" : null) ||
+    defaultContentType ||
+    localStorage.getItem("contentType") ||
+    "movie";
 
   const [movieData, setMovieData] = useState(location.state?.movie ?? null);
   const [movieLoading, setMovieLoading] = useState(true);
@@ -40,11 +48,11 @@ function MovieInfo({
     (item) => Number(item.id) === movieId
   );
 
-  // Fetch the full movie details from TMDB.
+  // Fetch the full details from TMDB (supporting movie or tv).
   useEffect(() => {
     const controller = new AbortController();
 
-    const fetchMovie = async () => {
+    const fetchDetails = async () => {
       setMovieLoading(true);
       setMovieError("");
 
@@ -55,20 +63,32 @@ function MovieInfo({
       }
 
       try {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}&language=en-US`,
+        const primaryEndpoint = activeType === "tv" ? "tv" : "movie";
+        let response = await fetch(
+          `https://api.themoviedb.org/3/${primaryEndpoint}/${movieId}?api_key=${TMDB_API_KEY}&language=en-US`,
           { signal: controller.signal }
         );
 
+        if (!response.ok && response.status === 404) {
+          const fallbackEndpoint = primaryEndpoint === "tv" ? "movie" : "tv";
+          const fallbackRes = await fetch(
+            `https://api.themoviedb.org/3/${fallbackEndpoint}/${movieId}?api_key=${TMDB_API_KEY}&language=en-US`,
+            { signal: controller.signal }
+          );
+          if (fallbackRes.ok) {
+            response = fallbackRes;
+          }
+        }
+
         if (!response.ok) {
-          throw new Error("Unable to load movie details.");
+          throw new Error("Unable to load details.");
         }
 
         const data = await response.json();
         setMovieData(data);
       } catch (error) {
         if (error.name !== "AbortError") {
-          setMovieError(error.message || "Unable to load movie details.");
+          setMovieError(error.message || "Unable to load details.");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -78,14 +98,14 @@ function MovieInfo({
     };
 
     if (Number.isSafeInteger(movieId) && movieId > 0) {
-      fetchMovie();
+      fetchDetails();
     } else {
-      setMovieError("Invalid movie ID.");
+      setMovieError("Invalid ID.");
       setMovieLoading(false);
     }
 
     return () => controller.abort();
-  }, [movieId]);
+  }, [movieId, activeType]);
 
   // Fetch comments. This endpoint is public, so no login is required.
   const fetchComments = async () => {
@@ -289,7 +309,7 @@ function MovieInfo({
         <div className="flex min-h-[40vh] items-center justify-center">
           <div className="text-center">
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-            <p className="mt-3 text-gray-600">Loading movie details...</p>
+            <p className="mt-3 text-gray-600">Loading details...</p>
           </div>
         </div>
       ) : movieError ? (
@@ -306,7 +326,7 @@ function MovieInfo({
                   ? `${TMDB_IMAGE_BASE_URL}${movieData.poster_path}`
                   : "https://placehold.co/270x390?text=No+Poster"
               }
-              alt={movieData.title || "Movie poster"}
+              alt={movieData.title || movieData.name || "Poster"}
             />
 
             {isInWatchlist ? (
@@ -325,9 +345,11 @@ function MovieInfo({
               <button
                 type="button"
                 onClick={() =>
-                  handleAddToWatchList?.(
-                    location.state?.movie ?? movieData
-                  )
+                  handleAddToWatchList?.({
+                    ...(location.state?.movie ?? movieData),
+                    title: movieData.title || movieData.name || "Untitled",
+                    release_date: movieData.release_date || movieData.first_air_date || "",
+                  })
                 }
                 className="mt-4 w-full rounded-lg bg-green-600 px-4 py-3 font-semibold text-white transition hover:bg-green-700"
               >
@@ -338,7 +360,7 @@ function MovieInfo({
 
           <div className="min-w-0 flex-1">
             <h1 className="text-3xl font-extrabold text-gray-900">
-              {movieData.title}
+              {movieData.title || movieData.name}
             </h1>
 
             {movieData.tagline && (
@@ -370,12 +392,13 @@ function MovieInfo({
               Overview
             </h2>
             <p className="mt-2 leading-7 text-gray-700">
-              {movieData.overview || "No overview is available for this movie."}
+              {movieData.overview || "No overview is available."}
             </p>
 
-            {movieData.release_date && (
+            {(movieData.release_date || movieData.first_air_date) && (
               <p className="mt-4 text-sm text-gray-500">
-                Release date: {movieData.release_date}
+                {movieData.first_air_date ? "First air date:" : "Release date:"}{" "}
+                {movieData.first_air_date || movieData.release_date}
               </p>
             )}
           </div>
@@ -392,7 +415,7 @@ function MovieInfo({
             </span>
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Share your thoughts about this movie.
+            Share your thoughts about this title.
           </p>
         </div>
 

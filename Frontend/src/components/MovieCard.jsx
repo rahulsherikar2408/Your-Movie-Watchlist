@@ -9,12 +9,16 @@ function MovieCard({
   watchList,
   handleAddToWatchList,
   handleRemoveFromWatchList,
+  contentType = "movie",
 }) {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [saving, setSaving] = useState(false);
 
   const isInWatchlist = watchList.some((item) => item.id === movie.id);
+
+  const displayTitle = title || movie.title || movie.name || "Untitled";
+  const displayReleaseDate = movie.release_date || movie.first_air_date || "";
 
   const handleWatchlistClick = async (event) => {
     event.stopPropagation();
@@ -28,11 +32,17 @@ function MovieCard({
 
     setSaving(true);
 
+    const normalizedMovie = {
+      ...movie,
+      title: displayTitle,
+      release_date: displayReleaseDate,
+    };
+
     try {
       if (isInWatchlist) {
-        await handleRemoveFromWatchList(movie);
+        await handleRemoveFromWatchList(normalizedMovie);
       } else {
-        await handleAddToWatchList(movie);
+        await handleAddToWatchList(normalizedMovie);
       }
     } catch {
       // Redux stores the API error; keep the card interactive.
@@ -45,7 +55,14 @@ function MovieCard({
     <div
       onClick={() =>
         navigate(`/movieinfo/${movie.id}`, {
-          state: { movie },
+          state: {
+            movie: {
+              ...movie,
+              title: displayTitle,
+              release_date: displayReleaseDate,
+            },
+            contentType: movie.first_air_date ? "tv" : contentType,
+          },
         })
       }
       className="m-3 flex h-[27vh] w-[130px] cursor-pointer flex-col items-end justify-between rounded-xl bg-cover bg-center duration-300 hover:scale-110 sm:h-[40vh] sm:w-[165px]"

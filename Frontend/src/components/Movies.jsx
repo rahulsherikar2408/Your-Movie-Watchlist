@@ -4,7 +4,14 @@ import axios from "axios";
 import MovieCard from "./MovieCard";
 import Pagination from "./Pagination";
 
-function Movies({ searchQuery, watchList, category, handleAddToWatchList, handleRemoveFromWatchList }) {
+function Movies({
+  contentType = "movie",
+  searchQuery,
+  watchList,
+  category,
+  handleAddToWatchList,
+  handleRemoveFromWatchList,
+}) {
   const [movies, setMovies] = useState([]);
   const [pageNo, setPageNo] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -13,11 +20,12 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
   const [error, setError] = useState("");
 
   const tmdbApiKey = import.meta.env.VITE_TMDB_API_KEY;
+  const isTv = contentType === "tv";
 
-  // Reset pagination when the search or category changes.
+  // Reset pagination when the search, category, or content type changes.
   useEffect(() => {
     setPageNo(1);
-  }, [searchQuery, category]);
+  }, [searchQuery, category, contentType]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,6 +63,7 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
 
       try {
         let endpoint;
+        const typePath = isTv ? "tv" : "movie";
         const params = {
           api_key: tmdbApiKey,
           language: "en-US",
@@ -63,21 +72,23 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
 
         // Search takes priority over the selected category.
         if (query) {
-          endpoint = "/search/movie";
+          endpoint = `/search/${typePath}`;
           params.query = query;
           params.include_adult = false;
         } else {
           switch (category) {
             case "Popular Movies":
-              endpoint = "/movie/popular";
+            case "Popular TV Shows":
+              endpoint = `/${typePath}/popular`;
               break;
 
             case "Top Rated Movies":
-              endpoint = "/movie/top_rated";
+            case "Top Rated TV Shows":
+              endpoint = `/${typePath}/top_rated`;
               break;
 
             default:
-              endpoint = "/trending/movie/day";
+              endpoint = `/trending/${typePath}/day`;
               break;
           }
         }
@@ -93,19 +104,19 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
         if (controller.signal.aborted) return;
 
         setMovies(response.data.results || []);
-        setTotalPages(response.data.total_pages,);
+        setTotalPages(response.data.total_pages || 1);
       } catch (err) {
         if (controller.signal.aborted || err.code === "ERR_CANCELED") {
           return;
         }
 
-        console.error("Error fetching movies:", err);
+        console.error("Error fetching content:", err);
 
         setMovies([]);
         setTotalPages(1);
         setError(
           err.response?.data?.status_message ||
-          "Unable to load movies. Please try again.",
+          `Unable to load ${isTv ? "TV shows" : "movies"}. Please try again.`,
         );
       } finally {
         if (!controller.signal.aborted) {
@@ -117,12 +128,13 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
     fetchMovies();
 
     return () => controller.abort();
-  }, [pageNo, category, searchQuery, tmdbApiKey]);
+  }, [pageNo, category, searchQuery, tmdbApiKey, isTv]);
 
+  const defaultHeading = isTv ? "Trending TV Shows" : "Trending Movies";
   const heading = searchQuery.trim()
     ? `Search Results for "${searchQuery.trim()}"`
     : category === "Category"
-      ? "Trending Movies"
+      ? defaultHeading
       : category;
 
   return (
@@ -132,7 +144,9 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
       {loading && (
         <div className="flex min-h-40 flex-col items-center justify-center">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-          <p className="mt-3 text-sm text-gray-500">Loading movies...</p>
+          <p className="mt-3 text-sm text-gray-500">
+            Loading {isTv ? "TV shows" : "movies"}...
+          </p>
         </div>
       )}
 
@@ -155,8 +169,8 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
       {!loading && !error && movies.length === 0 && (
         <p className="py-10 text-center text-gray-500">
           {searchQuery.trim()
-            ? "No movies found. Try a different search."
-            : "No movies available right now."}
+            ? `No ${isTv ? "TV shows" : "movies"} found. Try a different search.`
+            : `No ${isTv ? "TV shows" : "movies"} available right now.`}
         </p>
       )}
 
@@ -166,11 +180,12 @@ function Movies({ searchQuery, watchList, category, handleAddToWatchList, handle
             <MovieCard
               key={movie.id}
               movie={movie}
-              title={movie.title}
+              title={movie.title || movie.name}
               poster_path={movie.poster_path}
               watchList={watchList}
               handleAddToWatchList={handleAddToWatchList}
               handleRemoveFromWatchList={handleRemoveFromWatchList}
+              contentType={contentType}
             />
           ))}
         </div>

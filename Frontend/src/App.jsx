@@ -27,8 +27,18 @@ function App() {
 
   const watchList = useSelector((state) => state.watchlist.movies);
 
+  const [contentType, setContentType] = useState(() => {
+    return localStorage.getItem("contentType") || "movie";
+  });
   const [category, setCategory] = useState("Category");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const handleContentTypeChange = (newType) => {
+    setContentType(newType);
+    localStorage.setItem("contentType", newType);
+    setCategory("Category");
+    setSearchQuery("");
+  };
 
   const loaderUserId = useRef(null);
 
@@ -71,6 +81,8 @@ function App() {
     <>
       <Router>
         <Navbar
+          contentType={contentType}
+          onContentTypeChange={handleContentTypeChange}
           category={category}
           setCategory={setCategory}
           searchQuery={searchQuery}
@@ -84,6 +96,7 @@ function App() {
               <>
                 <Banner />
                 <Movies
+                  contentType={contentType}
                   searchQuery={searchQuery}
                   category={category}
                   watchList={watchList}
@@ -98,6 +111,7 @@ function App() {
             path="/movieinfo/:id"
             element={
               <MovieInfo
+                contentType={contentType}
                 watchList={watchList}
                 handleAddToWatchList={handleAddToWatchList}
                 handleRemoveFromWatchList={handleRemoveFromWatchList}

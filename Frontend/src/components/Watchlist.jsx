@@ -28,7 +28,9 @@ function Watchlist({ handleRemoveFromWatchList }) {
   const filteredMovies = useMemo(() => {
     const result = watchList
       .filter((movie) =>
-        movie.title.toLowerCase().includes(search.toLowerCase()),
+        (movie.title || movie.name || "")
+          .toLowerCase()
+          .includes(search.toLowerCase()),
       )
       .filter(
         (movie) =>
@@ -141,7 +143,10 @@ function Watchlist({ handleRemoveFromWatchList }) {
                       <td className="px-4 py-3">
                         <Link
                           to={`/movieinfo/${movie.id}`}
-                          state={{ movie }}
+                          state={{
+                            movie,
+                            contentType: movie.first_air_date ? "tv" : "movie",
+                          }}
                           className="flex items-center gap-4 font-semibold hover:text-blue-600"
                         >
                           <img
@@ -150,10 +155,10 @@ function Watchlist({ handleRemoveFromWatchList }) {
                                 ? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
                                 : ""
                             }
-                            alt={movie.title}
+                            alt={movie.title || movie.name}
                             className="h-20 w-14 rounded object-cover"
                           />
-                          {movie.title}
+                          {movie.title || movie.name}
                         </Link>
                       </td>
 
