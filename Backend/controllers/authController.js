@@ -1,5 +1,5 @@
 import User from "../models/user.js";
-import { generateToken, setTokenCookie, clearTokenCookie } from "../utils/generateToken.js";
+import { generateToken } from "../utils/generateToken.js";
 
 // POST /api/auth/register
 export const register = async (req, res, next) => {
@@ -57,7 +57,6 @@ export const register = async (req, res, next) => {
         });
 
         const token = generateToken(user._id);
-        setTokenCookie(res, token);
 
         return res.status(201).json({
             success: true,
@@ -109,7 +108,6 @@ export const login = async (req, res, next) => {
         }
 
         const token = generateToken(user._id);
-        setTokenCookie(res, token);
 
         return res.status(200).json({
             success: true,
@@ -132,7 +130,6 @@ export const getMe = async (req, res, next) => {
         const user = await User.findById(req.user.id);
 
         if (!user) {
-            clearTokenCookie(res);
 
             return res.status(401).json({
                 success: false,
@@ -155,7 +152,6 @@ export const getMe = async (req, res, next) => {
 
 // POST /api/auth/logout
 export const logout = (req, res) => {
-    clearTokenCookie(res);
 
     return res.status(200).json({
         success: true,

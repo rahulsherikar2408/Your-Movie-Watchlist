@@ -2,7 +2,6 @@ import 'dotenv/config'
 
 import express from 'express';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
 
 import connectDB from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
@@ -23,14 +22,12 @@ const PORT = process.env.PORT || 8000;
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
 // CORS configuration
 const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:5173",
-    credentials: true,
   })
 );
 
