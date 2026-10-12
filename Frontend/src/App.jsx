@@ -13,7 +13,8 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
-import { useAuth } from "./context/AuthContext";
+
+import { useAuth } from "./context/authContext";
 import { useToast } from "./context/ToastContext";
 import {
   fetchWatchlist,
