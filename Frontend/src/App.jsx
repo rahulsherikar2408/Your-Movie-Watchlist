@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 
 import Banner from "./components/Banner";
 import MovieInfo from "./components/MovieInfo";
@@ -11,49 +12,60 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
+import { useAuth } from "./context/authContext";
+import {
+  fetchWatchlist,
+  addMovieToWatchlist,
+  removeMovieFromWatchlist,
+  clearWatchlist,
+} from "./redux/watchlistSlice";
+import { useRef } from "react";
+
 function App() {
-  const [watchList, setWatchList] = useState([]);
+  const dispatch = useDispatch();
+  const { user, loading: authLoading } = useAuth();
+
+  const watchList = useSelector((state) => state.watchlist.movies);
+
   const [category, setCategory] = useState("Category");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const loaderUserId = useRef(null);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!user) {
+      loaderUserId.current = null;
+      dispatch(clearWatchlist());
+      return;
+    }
+
+    const userId = user.id || user._id;
+
+    if (!userId || loaderUserId.current === userId) {
+      return;
+    }
+
+    loaderUserId.current = userId;
+    dispatch(fetchWatchlist());
+  }, [user, authLoading, dispatch]);
+
   const handleAddToWatchList = (movie) => {
-    setWatchList((currentList) => {
-      if (currentList.some((item) => item.id === movie.id)) {
-        return currentList;
-      }
-
-      const updatedList = [...currentList, movie];
-      localStorage.setItem("movies", JSON.stringify(updatedList));
-
-      return updatedList;
-    });
+    if (!user) {
+      return;
+    }
+    dispatch(addMovieToWatchlist(movie));
   };
 
   const handleRemoveFromWatchList = (movie) => {
-    setWatchList((currentList) => {
-      const updatedList = currentList.filter((item) => item.id !== movie.id);
-
-      localStorage.setItem("movies", JSON.stringify(updatedList));
-
-      return updatedList;
-    });
-  };
-
-  useEffect(() => {
-    try {
-      const storedMovies = localStorage.getItem("movies");
-
-      if (storedMovies) {
-        const parsedMovies = JSON.parse(storedMovies);
-
-        if (Array.isArray(parsedMovies)) {
-          setWatchList(parsedMovies);
-        }
-      }
-    } catch {
-      localStorage.removeItem("movies");
+    if (!user) {
+      return;
     }
-  }, []);
+    dispatch(removeMovieFromWatchlist(movie.id));
+  };
 
   return (
     <>
@@ -87,7 +99,6 @@ function App() {
             element={
               <MovieInfo
                 watchList={watchList}
-                setWatchList={setWatchList}
                 handleAddToWatchList={handleAddToWatchList}
                 handleRemoveFromWatchList={handleRemoveFromWatchList}
               />
@@ -104,7 +115,6 @@ function App() {
               element={
                 <Watchlist
                   watchList={watchList}
-                  setWatchList={setWatchList}
                   handleRemoveFromWatchList={handleRemoveFromWatchList}
                 />
               }

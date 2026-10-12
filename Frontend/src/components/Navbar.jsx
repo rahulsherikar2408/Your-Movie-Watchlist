@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/authContext.js";
+
 import movieLogo from "../assets/image.png";
+import { useAuth } from "../context/AuthContext";
 
 const Navbar = ({ category, setCategory, searchQuery, setSearchQuery }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -11,7 +12,7 @@ const Navbar = ({ category, setCategory, searchQuery, setSearchQuery }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const categories = ["Trending Movies", "Popular Movies"];
+  const categories = ["Trending Movies", "Popular Movies", "Top Rated Movies"];
 
   const handleCategoryClick = (selectedCategory) => {
     setCategory(selectedCategory);

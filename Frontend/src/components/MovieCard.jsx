@@ -1,6 +1,6 @@
-import React from "react";
-import Watchlist from "./Watchlist";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function MovieCard({
   movie,
@@ -11,46 +11,62 @@ function MovieCard({
   handleRemoveFromWatchList,
 }) {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [saving, setSaving] = useState(false);
 
-  function doesContains() {
-    for (let i = 0; i < watchList.length; i++) {
-      if (watchList[i].id === movie.id) {
-        return true;
-      }
+  const isInWatchlist = watchList.some((item) => item.id === movie.id);
+
+  const handleWatchlistClick = async (event) => {
+    event.stopPropagation();
+
+    if (!isAuthenticated) {
+      navigate("/login", {
+        state: { from: { pathname: "/watchlist" } },
+      });
+      return;
     }
-    return false;
-  }
+
+    setSaving(true);
+
+    try {
+      if (isInWatchlist) {
+        await handleRemoveFromWatchList(movie);
+      } else {
+        await handleAddToWatchList(movie);
+      }
+    } catch {
+      // Redux stores the API error; keep the card interactive.
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div
-      onClick={() => navigate(`/movieinfo/${movie.id}`, { state: { movie } })}
-      className="h-[27vh] w-[130px] sm:h-[40vh] sm:w-[165px] m-3 rounded-xl bg-cover bg-center flex items-end flex-col justify-between hover:scale-110 duration-300 hover:cursor-pointer"
+      onClick={() =>
+        navigate(`/movieinfo/${movie.id}`, {
+          state: { movie },
+        })
+      }
+      className="m-3 flex h-[27vh] w-[130px] cursor-pointer flex-col items-end justify-between rounded-xl bg-cover bg-center duration-300 hover:scale-110 sm:h-[40vh] sm:w-[165px]"
       style={{
-        backgroundImage: `url(https://image.tmdb.org/t/p/original${poster_path})`,
+        backgroundImage: `url(https://image.tmdb.org/t/p/original${poster_path || ""})`,
       }}
     >
-      {doesContains(movie) ? (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRemoveFromWatchList(movie);
-          }}
-          className="m-2 flex justify-center h-5 w-5 text-xs rounded-sm sm:h-6 sm:w-6 sm:text-sm sm:rounded-md items-center bg-gray-900/60 "
-        >
-          &#10060;
-        </div>
-      ) : (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            handleAddToWatchList(movie);
-          }}
-          className="m-2 flex justify-center h-5 w-5 text-xs rounded-sm sm:h-6 sm:w-6 sm:text-sm sm:rounded-md items-center bg-gray-900/60 "
-        >
-          &#128525;
-        </div>
-      )}
-      <div className="w-full text-white text-sm sm:text-md p-1.5 text-center bg-gray-900/60 rounded-b-2xl">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={handleWatchlistClick}
+        aria-label={
+          isInWatchlist ? "Remove from watchlist" : "Add to watchlist"
+        }
+        title={isInWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+        className="m-2 flex h-6 w-6 items-center justify-center rounded-md bg-gray-900/70 text-sm text-white disabled:opacity-50"
+      >
+        {saving ? "…" : isInWatchlist ? "✕" : "♥"}
+      </button>
+
+      <div className="w-full rounded-b-2xl bg-gray-900/70 p-1.5 text-center text-sm text-white">
         {title}
       </div>
     </div>
