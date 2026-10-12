@@ -8,6 +8,8 @@ const api = axios.create({
   },
 });
 
+
+// Sending token in the http header
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {

@@ -28,20 +28,10 @@ app.use(cookieParser());
 // CORS configuration
 const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
 app.use(
-    cors({
-        origin: (origin, callback) => {
-            if (
-                !origin ||
-                origin === clientUrl ||
-                /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
-            ) {
-                callback(null, true);
-            } else {
-                callback(null, false);
-            }
-        },
-        credentials: true,
-    })
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    credentials: true,
+  })
 );
 
 // Routes
