@@ -98,7 +98,7 @@ const Navbar = ({
             <img
               src={movieLogo}
               alt="Movie Watchlist"
-              className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-black/5"
+              className="h-10 w-10 object-cover"
             />
 
             <span className="text-xl font-black tracking-tight text-gray-900 sm:text-2xl">
