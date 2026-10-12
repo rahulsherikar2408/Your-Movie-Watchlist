@@ -5,7 +5,11 @@ import { clearTokenCookie } from "../utils/generateToken.js";
 
 export const protect = async (req, res, next) => {
     try {
-        const token = req.cookie?.token;
+        const token =
+            req.cookies?.token ||
+            (req.headers.authorization?.startsWith("Bearer ")
+                ? req.headers.authorization.split(" ")[1]
+                : null);
 
         if (!token) {
             return res.status(401).json({

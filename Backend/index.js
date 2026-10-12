@@ -9,13 +9,16 @@ import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from "./routes/authRoutes.js";
 
 import dns from 'node:dns';
-dns.setServers(['8.8.8.8', '1.1.1.1']);
+if (process.env.MONGODB_URL && process.env.MONGODB_URL.startsWith('mongodb+srv://')) {
+    try {
+        dns.setServers(['8.8.8.8', '1.1.1.1']);
+    } catch (e) {
+        console.warn("Failed to set custom DNS servers:", e.message);
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-
-// MongoDB Connection
-connectDB()
 
 // Middlewares
 app.use(express.json());
@@ -23,9 +26,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // CORS configuration
+const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
 app.use(
     cors({
-        origin: process.env.CLIENT_URL || "http://localhost:5173",
+        origin: (origin, callback) => {
+            if (
+                !origin ||
+                origin === clientUrl ||
+                /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+            ) {
+                callback(null, true);
+            } else {
+                callback(null, false);
+            }
+        },
         credentials: true,
     })
 );

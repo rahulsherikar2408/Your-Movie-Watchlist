@@ -15,7 +15,7 @@ export const register = async (req, res, next) => {
         const normalizedName = name.trim();
         const normalizedEmail = email.trim().toLowerCase();
 
-        if (normalizedName.length < 2 || normalizedEmail.length > 50) {
+        if (normalizedName.length < 2 || normalizedName.length > 50) {
             return res.status(400).json({
                 success: false,
                 message: "Name must contain between 2 and 50 characters.",
@@ -62,6 +62,7 @@ export const register = async (req, res, next) => {
         return res.status(201).json({
             success: true,
             message: "Account created successfully.",
+            token,
             user: {
                 id: user._id,
                 name: user.name,
@@ -113,6 +114,7 @@ export const login = async (req, res, next) => {
         return res.status(200).json({
             success: true,
             message: "Login successful.",
+            token,
             user: {
                 id: user._id,
                 name: user.name,
