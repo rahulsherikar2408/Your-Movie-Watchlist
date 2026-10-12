@@ -1,341 +1,607 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import axios from "axios";
-import { useDispatch, useSelector } from "react-redux";
 
-import { useAuth } from "../context/AuthContext";
-import { addMovieToWatchlist, removeMovieFromWatchlist } from "../redux/watchlistSlice.js";
+import api from "../services/api.js";
+import { useAuth } from "../context/authContext.js";
 
-const MovieInfo = () => {
+const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
+
+function MovieInfo({
+  watchList = [],
+  handleAddToWatchList,
+  handleRemoveFromWatchList,
+}) {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
 
-  const { isAuthenticated } = useAuth();
+  const [movieData, setMovieData] = useState(location.state?.movie ?? null);
+  const [movieLoading, setMovieLoading] = useState(true);
+  const [movieError, setMovieError] = useState("");
 
-  const watchList = useSelector(
-    (state) => state.watchlist.movies
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsError, setCommentsError] = useState("");
+
+  const [commentText, setCommentText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState(null);
+  const [formError, setFormError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const movieId = Number(id);
+
+  const isInWatchlist = watchList.some(
+    (item) => Number(item.id) === movieId
   );
 
-  const [movieData, setMovieData] = useState(
-    location.state?.movie || null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [actionError, setActionError] = useState("");
-
-  // Fetch complete movie details from TMDB
+  // Fetch the full movie details from TMDB.
   useEffect(() => {
     const controller = new AbortController();
 
-    const getMovieInfoData = async () => {
-      setLoading(true);
-      setError("");
+    const fetchMovie = async () => {
+      setMovieLoading(true);
+      setMovieError("");
+
+      if (!TMDB_API_KEY) {
+        setMovieError("TMDB API key is not configured.");
+        setMovieLoading(false);
+        return;
+      }
 
       try {
-        const apiKey = import.meta.env.VITE_TMDB_API_KEY;
+        const response = await fetch(
+          `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}&language=en-US`,
+          { signal: controller.signal }
+        );
 
-        if (!apiKey) {
-          throw new Error(
-            "TMDB API key is missing. Check your frontend .env file."
-          );
+        if (!response.ok) {
+          throw new Error("Unable to load movie details.");
         }
 
-        const response = await axios.get(
-          `https://api.themoviedb.org/3/movie/${id}`,
-          {
-            params: {
-              api_key: apiKey,
-              language: "en-US",
-            },
-            signal: controller.signal,
-          }
-        );
-
-        setMovieData(response.data);
-      } catch (err) {
-        if (err.code === "ERR_CANCELED") return;
-
-        console.error("Error fetching movie details:", err);
-
-        setError(
-          err.response?.status === 404
-            ? "Movie not found."
-            : err.message ||
-                "Unable to load movie details. Please try again."
-        );
+        const data = await response.json();
+        setMovieData(data);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          setMovieError(error.message || "Unable to load movie details.");
+        }
       } finally {
         if (!controller.signal.aborted) {
-          setLoading(false);
+          setMovieLoading(false);
         }
       }
     };
 
-    getMovieInfoData();
-
-    return () => controller.abort();
-  }, [id]);
-
-  // Check whether the movie is already saved
-  const isInWatchlist = useMemo(() => {
-    if (!movieData?.id) return false;
-
-    return watchList.some(
-      (movie) => Number(movie.id) === Number(movieData.id)
-    );
-  }, [watchList, movieData?.id]);
-
-  // Normalize the movie object for the MongoDB watchlist
-  const savedMovie = useMemo(() => {
-    if (!movieData) return null;
-
-    return {
-      id: movieData.id,
-      title: movieData.title,
-      poster_path: movieData.poster_path || null,
-      vote_average: movieData.vote_average || 0,
-      popularity: movieData.popularity || 0,
-      genre_ids: movieData.genres
-        ? movieData.genres.map((genre) => genre.id)
-        : movieData.genre_ids || [],
-      overview: movieData.overview || "",
-      release_date: movieData.release_date || "",
-    };
-  }, [movieData]);
-
-  // Add or remove the movie through Redux and the backend
-  const handleWatchlistToggle = async () => {
-    if (!isAuthenticated) {
-      navigate("/login", {
-        state: {
-          from: {
-            pathname: location.pathname,
-            search: location.search,
-          },
-        },
-      });
-      return;
+    if (Number.isSafeInteger(movieId) && movieId > 0) {
+      fetchMovie();
+    } else {
+      setMovieError("Invalid movie ID.");
+      setMovieLoading(false);
     }
 
-    if (!savedMovie || saving) return;
+    return () => controller.abort();
+  }, [movieId]);
 
-    setSaving(true);
-    setActionError("");
+  // Fetch comments. This endpoint is public, so no login is required.
+  const fetchComments = async () => {
+    setCommentsLoading(true);
+    setCommentsError("");
 
     try {
-      if (isInWatchlist) {
-        await dispatch(
-          removeMovieFromWatchlist(savedMovie.id)
-        ).unwrap();
-      } else {
-        await dispatch(
-          addMovieToWatchlist(savedMovie)
-        ).unwrap();
-      }
-    } catch (err) {
-      setActionError(
-        typeof err === "string"
-          ? err
-          : "Unable to update your watchlist. Please try again."
+      const response = await api.get(`/movies/${movieId}/comments`);
+      setComments(response.data.comments ?? []);
+    } catch (error) {
+      setCommentsError(
+        error.response?.data?.message ||
+          "Unable to load comments. Please try again."
       );
     } finally {
-      setSaving(false);
+      setCommentsLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchComments();
+    // Re-fetch when navigating to a different movie.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movieId]);
+
+  const handleLoginRedirect = () => {
+    navigate("/login", {
+      state: { from: { pathname: location.pathname } },
+    });
+  };
+
+  const handleSubmitComment = async (event) => {
+    event.preventDefault();
+    setFormError("");
+    setSuccessMessage("");
+
+    const trimmedText = commentText.trim();
+
+    if (!trimmedText) {
+      setFormError("Please enter a comment.");
+      return;
+    }
+
+    if (trimmedText.length > 1000) {
+      setFormError("Comments cannot exceed 1000 characters.");
+      return;
+    }
+
+    if (!isAuthenticated) {
+      handleLoginRedirect();
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const response = await api.post(`/movies/${movieId}/comments`, {
+        text: trimmedText,
+      });
+
+      const newComment = response.data.comment;
+
+      setComments((current) => [
+        newComment,
+        ...current.filter((comment) => comment.id !== newComment.id),
+      ]);
+
+      setCommentText("");
+      setSuccessMessage("Your comment was added.");
+    } catch (error) {
+      setFormError(
+        error.response?.data?.message ||
+          "Unable to add your comment. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEdit = (comment) => {
+    setEditingCommentId(comment.id);
+    setEditText(comment.text);
+    setFormError("");
+    setSuccessMessage("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditText("");
+  };
+
+  const handleSaveEdit = async (commentId) => {
+    setFormError("");
+    setSuccessMessage("");
+
+    const trimmedText = editText.trim();
+
+    if (!trimmedText) {
+      setFormError("Comment cannot be empty.");
+      return;
+    }
+
+    if (trimmedText.length > 1000) {
+      setFormError("Comments cannot exceed 1000 characters.");
+      return;
+    }
+
+    setSavingEdit(true);
+
+    try {
+      const response = await api.patch(`/comments/${commentId}`, {
+        text: trimmedText,
+      });
+
+      const updatedComment = response.data.comment;
+
+      setComments((current) =>
+        current.map((comment) =>
+          comment.id === commentId ? updatedComment : comment
+        )
+      );
+
+      setEditingCommentId(null);
+      setEditText("");
+      setSuccessMessage("Your comment was updated.");
+    } catch (error) {
+      setFormError(
+        error.response?.data?.message ||
+          "Unable to update the comment. Please try again."
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this comment?"
+    );
+
+    if (!confirmed) return;
+
+    setFormError("");
+    setSuccessMessage("");
+    setDeletingCommentId(commentId);
+
+    try {
+      await api.delete(`/comments/${commentId}`);
+
+      setComments((current) =>
+        current.filter((comment) => comment.id !== commentId)
+      );
+
+      setSuccessMessage("Your comment was deleted.");
+    } catch (error) {
+      setFormError(
+        error.response?.data?.message ||
+          "Unable to delete the comment. Please try again."
+      );
+    } finally {
+      setDeletingCommentId(null);
+    }
+  };
+
+  const isCommentOwner = (comment) => {
+    if (!user || !comment.user) return false;
+
+    const currentUserId = user._id ?? user.id;
+    const commentUserId = comment.user.id ?? comment.user._id;
+
+    return (
+      currentUserId &&
+      commentUserId &&
+      String(currentUserId) === String(commentUserId)
+    );
+  };
+
+  const formatDate = (date) => {
+    if (!date) return "";
+
+    return new Intl.DateTimeFormat("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(date));
+  };
+
   return (
-    <div className="min-h-[70vh] bg-white pb-10">
-      {/* Back Button */}
+    <main className="min-h-screen bg-gray-50 pb-12">
+      {/* Back button */}
       <button
         type="button"
         onClick={() => navigate(-1)}
         aria-label="Go back"
-        className="ml-4 mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition duration-200 hover:scale-110 hover:bg-gray-200 sm:ml-12 sm:mt-7"
+        className="ml-4 mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-800 shadow-sm transition hover:scale-105 sm:ml-12 sm:mt-7"
       >
-        <i className="fa-solid fa-arrow-left" aria-hidden="true"></i>
+        <i className="fa-solid fa-arrow-left" />
       </button>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex min-h-[50vh] flex-col items-center justify-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-          <p className="mt-4 text-gray-600">
-            Loading movie details...
-          </p>
+      {/* Movie details */}
+      {movieLoading ? (
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="mt-3 text-gray-600">Loading movie details...</p>
+          </div>
         </div>
-      )}
-
-      {/* Error State */}
-      {!loading && error && (
-        <div className="mx-auto mt-10 max-w-xl px-5 text-center">
-          <p role="alert" className="text-lg font-semibold text-red-600">
-            {error}
-          </p>
-
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-700"
-          >
-            Browse Movies
-          </button>
+      ) : movieError ? (
+        <div className="mx-auto mt-8 max-w-3xl rounded-xl bg-red-50 p-5 text-center text-red-700">
+          {movieError}
         </div>
-      )}
-
-      {/* Movie Details */}
-      {!loading && !error && movieData && (
-        <div className="mx-auto mt-4 flex max-w-7xl flex-col items-center gap-7 px-5 sm:mx-10 sm:flex-row sm:items-start sm:gap-10 lg:px-8">
-
-          {/* Poster and Watchlist Button */}
-          <div className="flex w-full shrink-0 flex-col items-center sm:w-auto">
+      ) : movieData ? (
+        <section className="mx-auto mt-4 flex max-w-6xl flex-col gap-8 px-5 sm:flex-row sm:items-start sm:px-8">
+          <div className="flex shrink-0 flex-col items-center">
             <img
-              className="h-[380px] w-[260px] rounded-xl object-cover shadow-lg sm:h-[400px] sm:w-[280px]"
+              className="h-[330px] w-[220px] rounded-xl object-cover shadow-lg sm:h-[390px] sm:w-[270px]"
               src={
                 movieData.poster_path
-                  ? `https://image.tmdb.org/t/p/original${movieData.poster_path}`
-                  : "https://placehold.co/280x400?text=No+Poster"
+                  ? `${TMDB_IMAGE_BASE_URL}${movieData.poster_path}`
+                  : "https://placehold.co/270x390?text=No+Poster"
               }
-              alt={`${movieData.title} poster`}
+              alt={movieData.title || "Movie poster"}
             />
 
-            <button
-              type="button"
-              onClick={handleWatchlistToggle}
-              disabled={saving}
-              className={`mt-4 h-12 w-[260px] rounded-lg font-bold text-white transition duration-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-[280px] ${
-                isInWatchlist
-                  ? "bg-red-500 hover:bg-red-600"
-                  : "bg-green-500 hover:bg-green-600"
-              }`}
-            >
-              {saving
-                ? "Updating Watchlist..."
-                : isInWatchlist
-                  ? "Remove from Watchlist"
-                  : "Add to Watchlist"}
-            </button>
-
-            {actionError && (
-              <p
-                role="alert"
-                className="mt-3 max-w-[280px] text-center text-sm text-red-600"
+            {isInWatchlist ? (
+              <button
+                type="button"
+                onClick={() =>
+                  handleRemoveFromWatchList?.(
+                    watchList.find((item) => Number(item.id) === movieId)
+                  )
+                }
+                className="mt-4 w-full rounded-lg bg-red-600 px-4 py-3 font-semibold text-white transition hover:bg-red-700"
               >
-                {actionError}
-              </p>
-            )}
-
-            {!isAuthenticated && (
-              <p className="mt-2 text-center text-xs text-gray-500">
-                Log in to save movies to your watchlist.
-              </p>
+                Remove from Watchlist
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  handleAddToWatchList?.(
+                    location.state?.movie ?? movieData
+                  )
+                }
+                className="mt-4 w-full rounded-lg bg-green-600 px-4 py-3 font-semibold text-white transition hover:bg-green-700"
+              >
+                Add to Watchlist
+              </button>
             )}
           </div>
 
-          {/* Movie Information */}
-          <div className="flex w-full max-w-3xl flex-col items-start gap-4 sm:pt-3">
-            <h1 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-extrabold text-gray-900">
               {movieData.title}
             </h1>
 
             {movieData.tagline && (
-              <p className="text-base italic text-gray-500">
+              <p className="mt-2 italic text-gray-500">
                 {movieData.tagline}
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 text-sm sm:text-base">
-              <span className="flex items-center gap-2 font-semibold text-gray-800">
-                <i
-                  className="fa-solid fa-star text-yellow-400"
-                  aria-hidden="true"
-                />
-                {Number(movieData.vote_average || 0).toFixed(1)}/10
+            <p className="mt-4 text-gray-700">
+              <i className="fa-solid fa-star mr-2 text-yellow-400" />
+              {Number(movieData.vote_average || 0).toFixed(1)}/10
+              <span className="ml-2 text-sm text-gray-500">
+                ({movieData.vote_count ?? 0} votes)
               </span>
+            </p>
 
-              <span className="text-gray-500">
-                ({Number(movieData.vote_count || 0).toLocaleString()} votes)
-              </span>
-
-              {movieData.release_date && (
-                <span className="text-gray-600">
-                  Released: {movieData.release_date}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {movieData.genres?.map((genre) => (
+                <span
+                  key={genre.id}
+                  className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800"
+                >
+                  {genre.name}
                 </span>
-              )}
+              ))}
             </div>
 
-            {/* Genres */}
-            {movieData.genres?.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {movieData.genres.map((genre) => (
-                  <span
-                    key={genre.id}
-                    className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
-                  >
-                    {genre.name}
-                  </span>
-                ))}
-              </div>
+            <h2 className="mt-6 text-lg font-bold text-gray-900">
+              Overview
+            </h2>
+            <p className="mt-2 leading-7 text-gray-700">
+              {movieData.overview || "No overview is available for this movie."}
+            </p>
+
+            {movieData.release_date && (
+              <p className="mt-4 text-sm text-gray-500">
+                Release date: {movieData.release_date}
+              </p>
             )}
+          </div>
+        </section>
+      ) : null}
 
-            {/* Overview */}
-            <div className="mt-1">
-              <h2 className="mb-2 text-lg font-bold text-gray-900">
-                Overview
-              </h2>
+      {/* Comments */}
+      <section className="mx-auto mt-12 max-w-4xl px-5 sm:px-8">
+        <div className="border-b border-gray-200 pb-4">
+          <h2 className="text-2xl font-extrabold text-gray-900">
+            Comments
+            <span className="ml-2 text-lg font-medium text-gray-500">
+              ({comments.length})
+            </span>
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Share your thoughts about this movie.
+          </p>
+        </div>
 
-              <p className="text-sm leading-7 text-gray-600 sm:text-base">
-                {movieData.overview || "No overview is available for this movie."}
+        {/* Add comment form */}
+        {authLoading ? (
+          <p className="mt-5 text-sm text-gray-500">
+            Checking your sign-in status...
+          </p>
+        ) : isAuthenticated ? (
+          <form
+            onSubmit={handleSubmitComment}
+            className="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5"
+          >
+            <label
+              htmlFor="new-comment"
+              className="mb-2 block font-semibold text-gray-800"
+            >
+              Write a comment
+            </label>
+
+            <textarea
+              id="new-comment"
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+              placeholder="What did you think of this movie?"
+              rows={4}
+              maxLength={1000}
+              className="w-full resize-y rounded-lg border border-gray-300 p-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs text-gray-500">
+                {commentText.length}/1000 characters
+              </span>
+
+              <button
+                type="submit"
+                disabled={submitting || !commentText.trim()}
+                className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? "Posting..." : "Post Comment"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-5">
+            <p className="text-gray-700">
+              Sign in to join the conversation.
+            </p>
+            <button
+              type="button"
+              onClick={handleLoginRedirect}
+              className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white transition hover:bg-blue-700"
+            >
+              Sign in to comment
+            </button>
+          </div>
+        )}
+
+        {/* Feedback */}
+        {formError && (
+          <p
+            role="alert"
+            className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+          >
+            {formError}
+          </p>
+        )}
+
+        {successMessage && (
+          <p
+            role="status"
+            className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-700"
+          >
+            {successMessage}
+          </p>
+        )}
+
+        {/* Comments list */}
+        <div className="mt-6 space-y-4">
+          {commentsLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+              <span className="ml-3 text-sm text-gray-500">
+                Loading comments...
+              </span>
+            </div>
+          ) : commentsError ? (
+            <div className="rounded-xl bg-red-50 p-4 text-red-700">
+              <p>{commentsError}</p>
+              <button
+                type="button"
+                onClick={fetchComments}
+                className="mt-2 font-semibold underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : comments.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-300 bg-white px-5 py-10 text-center">
+              <i className="fa-regular fa-comments text-3xl text-gray-400" />
+              <p className="mt-3 font-semibold text-gray-700">
+                No comments yet
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Be the first to share your thoughts.
               </p>
             </div>
+          ) : (
+            comments.map((comment) => {
+              const isOwner = isCommentOwner(comment);
+              const isEditing = editingCommentId === comment.id;
 
-            {/* Additional Details */}
-            <div className="mt-2 grid w-full grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-2">
-              {movieData.runtime > 0 && (
-                <div>
-                  <p className="text-sm text-gray-500">Runtime</p>
-                  <p className="mt-1 font-semibold text-gray-800">
-                    {Math.floor(movieData.runtime / 60)}h{" "}
-                    {movieData.runtime % 60}m
-                  </p>
-                </div>
-              )}
+              return (
+                <article
+                  key={comment.id}
+                  className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
+                        {(comment.user?.name || "U")
+                          .charAt(0)
+                          .toUpperCase()}
+                      </div>
 
-              {movieData.original_language && (
-                <div>
-                  <p className="text-sm text-gray-500">
-                    Original Language
-                  </p>
-                  <p className="mt-1 font-semibold uppercase text-gray-800">
-                    {movieData.original_language}
-                  </p>
-                </div>
-              )}
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-gray-900">
+                          {comment.user?.name || "Former user"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatDate(comment.createdAt)}
+                          {comment.updatedAt !== comment.createdAt && (
+                            <span> · edited</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
 
-              {movieData.status && (
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <p className="mt-1 font-semibold text-gray-800">
-                    {movieData.status}
-                  </p>
-                </div>
-              )}
+                    {isOwner && !isEditing && (
+                      <div className="flex shrink-0 gap-3 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(comment)}
+                          className="font-semibold text-blue-600 hover:text-blue-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingCommentId === comment.id}
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
+                        >
+                          {deletingCommentId === comment.id
+                            ? "Deleting..."
+                            : "Delete"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-              {movieData.budget > 0 && (
-                <div>
-                  <p className="text-sm text-gray-500">Budget</p>
-                  <p className="mt-1 font-semibold text-gray-800">
-                    ${movieData.budget.toLocaleString()}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+                  {isEditing ? (
+                    <div className="mt-4">
+                      <textarea
+                        value={editText}
+                        onChange={(event) => setEditText(event.target.value)}
+                        maxLength={1000}
+                        rows={3}
+                        aria-label="Edit your comment"
+                        className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+
+                      <p className="mt-1 text-right text-xs text-gray-500">
+                        {editText.length}/1000 characters
+                      </p>
+
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          disabled={savingEdit}
+                          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEdit(comment.id)}
+                          disabled={savingEdit || !editText.trim()}
+                          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {savingEdit ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-gray-700">
+                      {comment.text}
+                    </p>
+                  )}
+                </article>
+              );
+            })
+          )}
         </div>
-      )}
-    </div>
+      </section>
+    </main>
   );
-};
+}
 
 export default MovieInfo;
