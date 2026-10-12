@@ -32,12 +32,19 @@ function App() {
   });
   const [category, setCategory] = useState("Category");
   const [searchQuery, setSearchQuery] = useState("");
+  const [pageNo, setPageNo] = useState(1);
+
+  const handleCategoryChange = (newCategory) => {
+    setCategory(newCategory);
+    setPageNo(1);
+  };
 
   const handleContentTypeChange = (newType) => {
     setContentType(newType);
     localStorage.setItem("contentType", newType);
     setCategory("Category");
     setSearchQuery("");
+    setPageNo(1);
   };
 
   const loaderUserId = useRef(null);
@@ -84,7 +91,7 @@ function App() {
           contentType={contentType}
           onContentTypeChange={handleContentTypeChange}
           category={category}
-          setCategory={setCategory}
+          setCategory={handleCategoryChange}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
         />
@@ -102,6 +109,8 @@ function App() {
                   watchList={watchList}
                   handleAddToWatchList={handleAddToWatchList}
                   handleRemoveFromWatchList={handleRemoveFromWatchList}
+                  pageNo={pageNo}
+                  setPageNo={setPageNo}
                 />
               </>
             }

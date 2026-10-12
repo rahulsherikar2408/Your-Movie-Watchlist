@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 import MovieCard from "./MovieCard";
@@ -11,21 +12,64 @@ function Movies({
   category,
   handleAddToWatchList,
   handleRemoveFromWatchList,
+  pageNo: externalPageNo,
+  setPageNo: setExternalPageNo,
 }) {
   const [movies, setMovies] = useState([]);
-  const [pageNo, setPageNo] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [internalPageNo, setInternalPageNo] = useState(1);
+  const pageNo = externalPageNo !== undefined ? externalPageNo : internalPageNo;
+  const setPageNo = setExternalPageNo || setInternalPageNo;
 
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const prevFilters = useRef({ searchQuery, category, contentType });
 
   const tmdbApiKey = import.meta.env.VITE_TMDB_API_KEY;
   const isTv = contentType === "tv";
 
-  // Reset pagination when the search, category, or content type changes.
+  // If the URL has ?page=X on mount, sync pageNo to it
   useEffect(() => {
-    setPageNo(1);
-  }, [searchQuery, category, contentType]);
+    const pageFromUrl = parseInt(searchParams.get("page"), 10);
+    if (pageFromUrl && pageFromUrl > 0 && pageFromUrl !== pageNo) {
+      setPageNo(pageFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reset pagination only when search, category, or content type actually CHANGES (not on initial mount or back-navigation)
+  useEffect(() => {
+    const prev = prevFilters.current;
+    const hasChanged =
+      prev.searchQuery !== searchQuery ||
+      prev.category !== category ||
+      prev.contentType !== contentType;
+
+    if (hasChanged) {
+      prevFilters.current = { searchQuery, category, contentType };
+      setPageNo(1);
+      setSearchParams((currentParams) => {
+        const next = new URLSearchParams(currentParams);
+        next.delete("page");
+        return next;
+      });
+    }
+  }, [searchQuery, category, contentType, setPageNo, setSearchParams]);
+
+  const handlePageChange = (newPage) => {
+    setPageNo(newPage);
+    setSearchParams((currentParams) => {
+      const next = new URLSearchParams(currentParams);
+      if (newPage <= 1) {
+        next.delete("page");
+      } else {
+        next.set("page", String(newPage));
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -194,7 +238,7 @@ function Movies({
       {!loading && !error && movies.length > 0 && (
         <Pagination
           pageNo={pageNo}
-          setPageNo={setPageNo}
+          setPageNo={handlePageChange}
           totalPages={totalPages}
         />
       )}
