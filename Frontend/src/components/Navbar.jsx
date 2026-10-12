@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 
 import movieLogo from "../assets/image.png";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/authContext";
 import { useToast } from "../context/ToastContext";
 
 const Navbar = ({
