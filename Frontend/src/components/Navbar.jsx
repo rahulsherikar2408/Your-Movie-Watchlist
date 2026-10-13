@@ -15,7 +15,10 @@ const Navbar = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const categoryDropdownRef = useRef(null);
+  const profileDropdownRef = useRef(null);
 
   const { user, isAuthenticated, logout } = useAuth();
   const { toast } = useToast();
@@ -34,15 +37,47 @@ const Navbar = ({
   ];
   const categories = contentType === "tv" ? tvCategories : movieCategories;
 
-  // Close category dropdown on outside click
+  // Compute initials (e.g., "Rahul Sherikar" -> "RS")
+  const getInitials = (name) => {
+    if (!name) return "U";
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  // Close dropdowns on outside click or Escape key
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target)
+      ) {
         setCategoryOpen(false);
       }
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(event.target)
+      ) {
+        setProfileOpen(false);
+      }
     };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setCategoryOpen(false);
+        setProfileOpen(false);
+        setMenuOpen(false);
+      }
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   const handleContentTypeToggle = (type) => {
@@ -64,9 +99,10 @@ const Navbar = ({
 
   const handleLogout = async () => {
     try {
+      setProfileOpen(false);
+      setMenuOpen(false);
       await logout();
       toast.info("You have been logged out successfully.");
-      setMenuOpen(false);
       navigate("/", { replace: true });
     } catch {
       toast.error("Unable to log out. Please try again.");
@@ -76,6 +112,7 @@ const Navbar = ({
   const closeMenu = () => {
     setMenuOpen(false);
     setCategoryOpen(false);
+    setProfileOpen(false);
   };
 
   const navLinkClass = (path) =>
@@ -98,7 +135,7 @@ const Navbar = ({
             <img
               src={movieLogo}
               alt="Movie Watchlist"
-              className="h-10 w-10 object-cover"
+              className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-black/5"
             />
 
             <span className="text-xl font-black tracking-tight text-gray-900 sm:text-2xl">
@@ -113,10 +150,13 @@ const Navbar = ({
             </Link>
 
             {/* Category Dropdown */}
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative" ref={categoryDropdownRef}>
               <button
                 type="button"
-                onClick={() => setCategoryOpen((open) => !open)}
+                onClick={() => {
+                  setCategoryOpen((open) => !open);
+                  setProfileOpen(false);
+                }}
                 aria-expanded={categoryOpen}
                 className="flex items-center gap-1.5 text-base font-bold text-gray-700 transition hover:text-blue-600 cursor-pointer"
               >
@@ -222,31 +262,110 @@ const Navbar = ({
             </div>
           </div>
 
-          {/* Desktop Auth Controls */}
+          {/* Desktop Auth Controls & User Profile Dropdown */}
           <div className="hidden shrink-0 items-center gap-3 md:flex">
             {isAuthenticated ? (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2.5 rounded-full border border-gray-200 bg-gray-50/80 p-1.5 pr-3.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-sm font-bold text-white shadow-xs">
-                    {(user?.name || "U").charAt(0).toUpperCase()}
-                  </div>
-                  <span
-                    className="max-w-32 truncate text-sm font-bold text-gray-800"
-                    title={user?.name}
-                  >
-                    {user?.name}
-                  </span>
-                </div>
-
+              <div className="relative" ref={profileDropdownRef}>
+                {/* Profile Pill Trigger Button */}
                 <button
                   type="button"
-                  onClick={handleLogout}
-                  title="Log out"
-                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50/70 px-3.5 py-2 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white"
+                  onClick={() => {
+                    setProfileOpen((prev) => !prev);
+                    setCategoryOpen(false);
+                  }}
+                  aria-expanded={profileOpen}
+                  className="inline-flex items-center gap-2.5 rounded-full border border-gray-200 bg-slate-100/90 hover:bg-slate-200/80 p-1 pr-3 text-sm font-bold text-gray-800 transition shadow-xs cursor-pointer select-none"
                 >
-                  <i className="fa-solid fa-arrow-right-from-bracket text-sm" />
-                  <span>Logout</span>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs sm:text-sm font-bold text-white shadow-xs shrink-0">
+                    {getInitials(user?.name)}
+                  </div>
+                  <span
+                    className="max-w-36 truncate text-sm font-bold text-gray-800"
+                    title={user?.name}
+                  >
+                    {user?.name || "User"}
+                  </span>
+                  <i
+                    className={`fa-solid fa-chevron-down text-xs text-gray-500 transition-transform duration-200 ${
+                      profileOpen ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
+
+                {/* Profile Dropdown Menu Card */}
+                {profileOpen && (
+                  <div className="absolute right-0 top-full mt-2.5 w-76 sm:w-80 overflow-hidden rounded-2xl border border-gray-100 bg-white p-3.5 shadow-2xl ring-1 ring-black/5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    {/* User Profile Header */}
+                    <div className="flex items-center gap-3 px-1 py-1 pb-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-base font-bold text-white shadow-sm">
+                        {getInitials(user?.name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="truncate text-base font-bold text-gray-900 leading-snug">
+                          {user?.name || "User"}
+                        </h4>
+                        <p
+                          className="truncate text-xs sm:text-sm font-medium text-gray-500 mt-0.5"
+                          title={user?.email}
+                        >
+                          {user?.email || ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-100 my-2" />
+
+                    {/* Navigation Items */}
+                    <div className="space-y-0.5">
+                      <Link
+                        to="/watchlist"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 hover:text-blue-600"
+                      >
+                        <i className="fa-solid fa-list-check w-5 text-center text-gray-500 text-base" />
+                        <span>My Watchlist</span>
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleContentTypeToggle("movie");
+                          setProfileOpen(false);
+                        }}
+                        className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-50 hover:text-blue-600"
+                      >
+                        <i className="fa-solid fa-film w-5 text-center text-gray-500 text-base" />
+                        <span>Movies</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleContentTypeToggle("tv");
+                          setProfileOpen(false);
+                        }}
+                        className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-50 hover:text-blue-600"
+                      >
+                        <i className="fa-solid fa-tv w-5 text-center text-gray-500 text-base" />
+                        <span>TV Shows</span>
+                      </button>
+                    </div>
+
+                    {/* Divider before Sign out */}
+                    <div className="border-t border-gray-100 my-2" />
+
+                    {/* Sign out item */}
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3.5 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-red-500 transition hover:bg-red-50 cursor-pointer"
+                    >
+                      <i className="fa-solid fa-arrow-right-from-bracket w-5 text-center text-red-500 text-base" />
+                      <span>Sign out</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-2.5">
@@ -411,30 +530,42 @@ const Navbar = ({
               </Link>
             </div>
 
-            {/* Mobile Auth */}
+            {/* Mobile Auth Section */}
             <div className="border-t border-gray-100 pt-3">
               {isAuthenticated ? (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-3 px-1">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                      {(user?.name || "U").charAt(0).toUpperCase()}
+                <div className="flex flex-col gap-2 rounded-2xl bg-gray-50 p-3.5 border border-gray-200/70">
+                  <div className="flex items-center gap-3 px-1 py-1">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white shadow-xs">
+                      {getInitials(user?.name)}
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">
-                        {user?.name}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-bold text-gray-900 leading-snug">
+                        {user?.name || "User"}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="truncate text-xs font-medium text-gray-500 mt-0.5">
                         {user?.email}
                       </p>
                     </div>
                   </div>
 
+                  <div className="border-t border-gray-200/60 my-1" />
+
+                  <Link
+                    to="/watchlist"
+                    onClick={closeMenu}
+                    className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-gray-700 hover:bg-white"
+                  >
+                    <i className="fa-solid fa-list-check w-5 text-center text-gray-500" />
+                    <span>My Watchlist</span>
+                  </Link>
+
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="w-full rounded-xl bg-red-50 py-3 text-center text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 text-left transition cursor-pointer"
                   >
-                    Logout
+                    <i className="fa-solid fa-arrow-right-from-bracket w-5 text-center text-red-500" />
+                    <span>Sign out</span>
                   </button>
                 </div>
               ) : (
